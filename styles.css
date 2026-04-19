@@ -847,6 +847,7 @@ input[type="date"] {
 .calendar-tooltip {
   position: fixed;
   z-index: 9999;
+  --arrow-left: 26px;
   max-width: min(420px, calc(100vw - 24px));
   padding: 10px 12px;
   border-radius: 10px;
@@ -855,6 +856,44 @@ input[type="date"] {
   box-shadow: 0 10px 30px #1f4f7a2e;
   color: #1d3853;
   pointer-events: none;
+}
+
+.calendar-tooltip::before,
+.calendar-tooltip::after {
+  content: "";
+  position: absolute;
+  left: var(--arrow-left);
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+}
+
+.calendar-tooltip.calendar-tooltip-above::before {
+  bottom: -9px;
+  border-left: 9px solid transparent;
+  border-right: 9px solid transparent;
+  border-top: 9px solid #b8cde4;
+}
+
+.calendar-tooltip.calendar-tooltip-above::after {
+  bottom: -8px;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-top: 8px solid #ffffff;
+}
+
+.calendar-tooltip.calendar-tooltip-below::before {
+  top: -9px;
+  border-left: 9px solid transparent;
+  border-right: 9px solid transparent;
+  border-bottom: 9px solid #b8cde4;
+}
+
+.calendar-tooltip.calendar-tooltip-below::after {
+  top: -8px;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-bottom: 8px solid #ffffff;
 }
 
 .calendar-tooltip-row {

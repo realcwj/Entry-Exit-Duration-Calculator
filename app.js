@@ -229,7 +229,7 @@ function formatDayRecordBrief(row) {
   const port = normalizePortName(row["出入境口岸"]) || normalizeText(row["出入境口岸"]) || "口岸未知";
   const certName = normalizeText(row["证件名称"]) || "证件";
   const certNum = normalizeText(row["证件号码"]);
-  const certText = certNum ? `${certName}${certNum}` : certName;
+  const certText = certNum ? `${certName} ${certNum}` : certName;
   return `${dateText} ${port} ${certText}`;
 }
 
@@ -325,8 +325,8 @@ function createDemoFlightCode() {
 }
 
 function buildRandomDemoData() {
-  const count = randomInt(1, 50) * 2;
-  const maxSpanDays = randomInt(Math.max(1, count - 1), 365);
+  const count = randomInt(50, 100) * 2;
+  const maxSpanDays = randomInt(Math.max(1, count - 1), 666);
   const candidates = [];
   for (let i = 0; i <= maxSpanDays; i++) {
     candidates.push(i);
@@ -1411,11 +1411,19 @@ function showCalendarTooltip(dayCell) {
   const rect = dayCell.getBoundingClientRect();
   const margin = 10;
   const tipRect = tip.getBoundingClientRect();
+  const anchorCenterX = rect.left + rect.width / 2;
   let left = rect.left + rect.width / 2 - tipRect.width / 2;
   left = Math.max(margin, Math.min(window.innerWidth - tipRect.width - margin, left));
-  let top = rect.top - tipRect.height - 8;
+  const arrowLeft = Math.max(12, Math.min(tipRect.width - 12, anchorCenterX - left));
+  tip.style.setProperty("--arrow-left", `${arrowLeft}px`);
+
+  tip.classList.remove("calendar-tooltip-above", "calendar-tooltip-below");
+  let top = rect.top - tipRect.height - 12;
   if (top < margin) {
-    top = rect.bottom + 8;
+    top = rect.bottom + 12;
+    tip.classList.add("calendar-tooltip-below");
+  } else {
+    tip.classList.add("calendar-tooltip-above");
   }
   tip.style.left = `${left}px`;
   tip.style.top = `${top}px`;
