@@ -16,6 +16,8 @@
 
 ## 使用方法
 
+在线使用：[>>>点我访问在线版本<<<](https://realcwj.github.io/Entry-Exit-Duration-Calculator/)
+
 1. 下载本项目：含 index.html（主页面）、styles.css（样式表）、app.js（功能脚本）。
 2. 打开页面：index.html。
 3. 上传“出入境记录查询结果”PDF（拖拽或点击）。
