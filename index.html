@@ -83,12 +83,15 @@
           <h2>上传“出入境记录查询结果”PDF</h2>
           <div class="upload-head-notes">
             <p class="upload-head-note"><i class="bi bi-info-circle-fill" aria-hidden="true"></i> 所有数据均在浏览器前端计算，不会上传云端，请放心使用。</p>
-            <p class="upload-head-note"><i class="bi bi-info-circle-fill" aria-hidden="true"></i> 还是不放心？点我<a href="https://github.com/realcwj/Entry-Exit-Duration-Calculator" target="_blank" rel="noopener noreferrer">审查源代码/本地部署</a></p>
+            <p class="upload-head-note"><i class="bi bi-info-circle-fill" aria-hidden="true"></i> 还是不放心？点我<a href="https://github.com/realcwj/Entry-Exit-Duration-Calculator#%E4%BD%BF%E7%94%A8%E6%96%B9%E6%B3%95" target="_blank" rel="noopener noreferrer">审查源代码/本地部署</a></p>
           </div>
         </div>
 
         <div class="section-body">
           <input id="pdfInput" class="hidden" type="file" accept="application/pdf" />
+          <div class="action-row action-row-full">
+            <button id="btnRandomDemo" class="btn btn-secondary" type="button">随机一个</button>
+          </div>
           <div id="dropzone" class="dropzone" role="button" tabindex="0">
             <strong>拖入 PDF 或点击选择文件</strong>
             <span>识别后立即解析并核验</span>

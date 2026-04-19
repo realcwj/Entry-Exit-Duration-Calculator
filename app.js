@@ -13,6 +13,7 @@ const state = {
   shanghaiLevel: "master",
   adjustMode: "",
   earliestEntryDate: "",
+  calcRafId: 0,
 };
 
 const el = {
@@ -36,6 +37,7 @@ const el = {
   btnUseLastEntry: document.getElementById("btnUseLastEntry"),
   btnReupload: document.getElementById("btnReupload"),
   btnExport: document.getElementById("btnExport"),
+  btnRandomDemo: document.getElementById("btnRandomDemo"),
   calcSection: document.getElementById("calcSection"),
   startDate: document.getElementById("startDate"),
   endDate: document.getElementById("endDate"),
@@ -63,6 +65,25 @@ const SHANGHAI_REQUIREMENTS = {
   master: 180,
   doctor: 360,
 };
+
+const DEMO_CERT_TYPES = ["普通护照", "往来港澳通行证", "往来台湾通行证"];
+const DEMO_PORTS = [
+  "上海浦东国际机场",
+  "北京大兴国际机场",
+  "深圳湾口岸",
+  "广州白云国际机场",
+  "杭州萧山国际机场",
+  "成都天府国际机场",
+  "港珠澳大桥口岸",
+  "拱北口岸",
+  "福田口岸",
+  "深圳口岸",
+  "横琴口岸",
+  "呜咦唔啊啊蹭蹭哇啦哇啦笨笨口岸"
+];
+const DEMO_AIRLINE_PREFIX = ["MU", "CA", "CZ", "FM", "HU", "9C", "MF", "ZH", "HO", "SC"];
+const CALENDAR_WEEKDAY_ROW =
+  "<div class=\"week\"><div class=\"wk\">一</div><div class=\"wk\">二</div><div class=\"wk\">三</div><div class=\"wk\">四</div><div class=\"wk\">五</div><div class=\"wk\">六</div><div class=\"wk\">日</div></div>";
 
 function pad2(v) {
   return String(v).padStart(2, "0");
@@ -255,6 +276,92 @@ function initQualificationControls() {
     state.shanghaiLevel = level;
     updateQualificationPanels(state.highlightedDays);
   });
+}
+
+function randomInt(min, max) {
+  const low = Math.ceil(Number(min));
+  const high = Math.floor(Number(max));
+  if (!Number.isFinite(low) || !Number.isFinite(high) || high < low) return low;
+  return Math.floor(Math.random() * (high - low + 1)) + low;
+}
+
+function randomPick(arr) {
+  if (!Array.isArray(arr) || !arr.length) return "";
+  return arr[randomInt(0, arr.length - 1)];
+}
+
+function createDemoCertNumber() {
+  const prefix = randomPick(["E", "P", "H", "K"]);
+  const body = String(randomInt(1000000, 9999999));
+  return `${prefix}${body}`;
+}
+
+function createDemoFlightCode() {
+  const prefix = randomPick(DEMO_AIRLINE_PREFIX);
+  const serial = String(randomInt(100, 9999));
+  return `${prefix}${serial}`;
+}
+
+function buildRandomDemoData() {
+  const count = randomInt(1, 50) * 2;
+  const maxSpanDays = randomInt(Math.max(1, count - 1), 365);
+  const candidates = [];
+  for (let i = 0; i <= maxSpanDays; i++) {
+    candidates.push(i);
+  }
+  for (let i = candidates.length - 1; i > 0; i--) {
+    const j = randomInt(0, i);
+    const tmp = candidates[i];
+    candidates[i] = candidates[j];
+    candidates[j] = tmp;
+  }
+  const sortedOffsets = candidates
+    .slice(0, count)
+    .sort((a, b) => b - a);
+  const certType = randomPick(DEMO_CERT_TYPES);
+  const certNumber = createDemoCertNumber();
+  const now = getBeijingTodayKey();
+  const records = sortedOffsets.map((offset, index) => ({
+    "序号": String(count - index),
+    "出境/入境": index % 2 === 0 ? "出境" : "入境",
+    "出入境日期": addDaysToDateKey(now, -offset),
+    "证件名称": certType,
+    "证件号码": certNumber,
+    "出入境口岸": randomPick(DEMO_PORTS),
+    "航班号": createDemoFlightCode(),
+  }));
+
+  return {
+    "来源文件": "随机演示数据",
+    "生成时间": formatDateTimeByTimezone(new Date(), "Asia/Shanghai"),
+    "提取页数": 0,
+    "表头": BASE_HEADERS,
+    "总行数": records.length,
+    "数据": records,
+  };
+}
+
+function prepareDemoWorkingData(rawDemoData) {
+  const copy = JSON.parse(JSON.stringify(rawDemoData));
+  copy["数据"].sort((a, b) => toSerial(a) - toSerial(b));
+  copy["总行数"] = copy["数据"].length;
+  const base = copy["总行数"];
+
+  const latest = getLatestRecord(copy["数据"]);
+  if (latest && normalizeText(latest["出境/入境"]) === "出境") {
+    copy["数据"].push(buildVirtualEntry(latest));
+    copy["数据"].sort((a, b) => toSerial(a) - toSerial(b));
+    copy["总行数"] = copy["数据"].length;
+    return {
+      dataset: copy,
+      summary: `${base}+1（随机演示自动补齐今日入境记录）`,
+    };
+  }
+
+  return {
+    dataset: copy,
+    summary: String(base),
+  };
 }
 
 function normalizePortName(raw) {
@@ -906,7 +1013,7 @@ function updatePortChecklistByCredentials(records) {
     .sort((a, b) => a.localeCompare(b, "zh-CN"))
     .map((x) => ({ value: x, label: x }));
 
-  buildChecklist(el.portList, portItems, () => performCalculation());
+  buildChecklist(el.portList, portItems, () => requestCalculation());
 
   const itemInputs = Array.from(el.portList.querySelectorAll('input[data-value]'));
   if (!itemInputs.length) return;
@@ -961,7 +1068,7 @@ function setupCalc(dataset) {
       .map(([value, label]) => ({ value, label })),
     () => {
       updatePortChecklistByCredentials(records);
-      performCalculation();
+      requestCalculation();
     }
   );
 
@@ -970,38 +1077,31 @@ function setupCalc(dataset) {
   el.calcSection.classList.remove("hidden");
   setCalcOrderWarn("");
   el.resultBox.classList.add("hidden");
-  performCalculation();
+  requestCalculation();
 }
 
 function calculateAbroad(records) {
   const sorted = [...records].sort((a, b) => toSerial(b) - toSerial(a));
   const abroad = new Map();
+  let pendingExit = null;
 
-  for (let i = 0; i < sorted.length; i++) {
-    const row = sorted[i];
-    if (normalizeText(row["出境/入境"]) !== "出境") continue;
-
+  for (const row of sorted) {
+    const typ = normalizeText(row["出境/入境"]);
     const d = normalizeText(row["出入境日期"]);
     if (!isValidDateKey(d)) continue;
     const cert = `${normalizeText(row["证件名称"])}${normalizeText(row["证件号码"])}`;
 
-    const exitDate = d;
-    let entryDate = d;
-
-    for (let j = i + 1; j < sorted.length; j++) {
-      if (normalizeText(sorted[j]["出境/入境"]) === "入境") {
-        const e = normalizeText(sorted[j]["出入境日期"]);
-        if (isValidDateKey(e)) {
-          entryDate = e;
-        }
-        break;
-      }
+    if (typ === "出境") {
+      pendingExit = { date: d, cert };
+      continue;
     }
 
-    for (let key = exitDate; key <= entryDate; key = addDaysToDateKey(key, 1)) {
+    if (typ !== "入境" || !pendingExit) continue;
+    for (let key = pendingExit.date; key <= d; key = addDaysToDateKey(key, 1)) {
       if (!abroad.has(key)) abroad.set(key, new Set());
-      abroad.get(key).add(cert);
+      abroad.get(key).add(pendingExit.cert);
     }
+    pendingExit = null;
   }
 
   return abroad;
@@ -1090,7 +1190,7 @@ function renderCalendar(start, end, abroadSet) {
   let cursorMonth = displayStartMonth.m;
   const endYear = displayEndMonth.y;
   const endMonth = displayEndMonth.m;
-  const weekdays = ["一", "二", "三", "四", "五", "六", "日"];
+  const frag = document.createDocumentFragment();
 
   while (cursorYear < endYear || (cursorYear === endYear && cursorMonth <= endMonth)) {
     const y = cursorYear;
@@ -1099,41 +1199,24 @@ function renderCalendar(start, end, abroadSet) {
 
     const card = document.createElement("article");
     card.className = "month";
-    card.innerHTML = `<h4>${y}年${pad2(m)}月</h4>`;
-
-    const week = document.createElement("div");
-    week.className = "week";
-    weekdays.forEach((w) => {
-      const n = document.createElement("div");
-      n.className = "wk";
-      n.textContent = w;
-      week.appendChild(n);
-    });
-    card.appendChild(week);
-
-    const grid = document.createElement("div");
-    grid.className = "week";
+    const html = [`<h4>${y}年${pad2(m)}月</h4>`, CALENDAR_WEEKDAY_ROW, "<div class=\"week\">"];
     const lead = weekdayMon0ByDateKey(y, m, 1);
     for (let i = 0; i < lead; i++) {
-      const b = document.createElement("div");
-      b.className = "day blank";
-      grid.appendChild(b);
+      html.push("<div class=\"day blank\"></div>");
     }
 
     for (let d = 1; d <= days; d++) {
       const key = formatDateKey(y, m, d);
-      const cell = document.createElement("div");
-      cell.className = "day";
       if (inRangeAbroadSet.has(key)) {
-        cell.classList.add("abroad");
+        html.push(`<div class="day abroad">${d}</div>`);
         highlightedDays += 1;
+      } else {
+        html.push(`<div class="day">${d}</div>`);
       }
-      cell.textContent = String(d);
-      grid.appendChild(cell);
     }
-
-    card.appendChild(grid);
-    el.calendar.appendChild(card);
+    html.push("</div>");
+    card.innerHTML = html.join("");
+    frag.appendChild(card);
     if (cursorMonth === 12) {
       cursorMonth = 1;
       cursorYear += 1;
@@ -1142,6 +1225,7 @@ function renderCalendar(start, end, abroadSet) {
     }
   }
 
+  el.calendar.replaceChildren(frag);
   el.totalDays.innerHTML = `<span class="total-label">累计总出境天数</span><span class="total-value">${highlightedDays} 天</span>`;
   state.highlightedDays = highlightedDays;
   updateQualificationPanels(highlightedDays);
@@ -1334,6 +1418,20 @@ el.btnExport.addEventListener("click", () => {
   a.remove();
 });
 
+if (el.btnRandomDemo) {
+  el.btnRandomDemo.addEventListener("click", () => {
+    const demoData = buildRandomDemoData();
+    state.originalData = JSON.parse(JSON.stringify(demoData));
+    state.baseTotalRows = Number(demoData["总行数"]) || 0;
+    state.adjustmentSummary = "";
+    el.btnExport.classList.remove("hidden");
+    el.btnExport.disabled = false;
+    renderStats(demoData);
+    const prepared = prepareDemoWorkingData(demoData);
+    runValidation(prepared.dataset, prepared.summary);
+  });
+}
+
 el.btnReupload.addEventListener("click", () => {
   el.pdfInput.value = "";
   el.pdfInput.click();
@@ -1392,8 +1490,18 @@ function performCalculation() {
   el.resultBox.classList.remove("hidden");
 }
 
-el.startDate.addEventListener("change", performCalculation);
-el.endDate.addEventListener("change", performCalculation);
+function requestCalculation() {
+  if (state.calcRafId) {
+    cancelAnimationFrame(state.calcRafId);
+  }
+  state.calcRafId = requestAnimationFrame(() => {
+    state.calcRafId = 0;
+    performCalculation();
+  });
+}
+
+el.startDate.addEventListener("change", requestCalculation);
+el.endDate.addEventListener("change", requestCalculation);
 
 updateTimeDisplays();
 setInterval(updateTimeDisplays, 60 * 1000);
