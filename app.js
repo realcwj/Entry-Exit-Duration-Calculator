@@ -14,6 +14,8 @@ const state = {
   adjustMode: "",
   earliestEntryDate: "",
   calcRafId: 0,
+  calendarDayInfoMap: new Map(),
+  activeCalendarDay: "",
 };
 
 const el = {
@@ -84,6 +86,7 @@ const DEMO_PORTS = [
 const DEMO_AIRLINE_PREFIX = ["MU", "CA", "CZ", "FM", "HU", "9C", "MF", "ZH", "HO", "SC"];
 const CALENDAR_WEEKDAY_ROW =
   "<div class=\"week\"><div class=\"wk\">一</div><div class=\"wk\">二</div><div class=\"wk\">三</div><div class=\"wk\">四</div><div class=\"wk\">五</div><div class=\"wk\">六</div><div class=\"wk\">日</div></div>";
+let calendarTooltipEl = null;
 
 function pad2(v) {
   return String(v).padStart(2, "0");
@@ -205,10 +208,29 @@ function setStatus(text, type = "") {
   el.status.className = type ? `status ${type}` : "status";
 }
 
+function escapeHtml(text) {
+  return normalizeText(text)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function formatDateZh(dateText) {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(normalizeText(dateText));
   if (!m) return normalizeText(dateText);
   return `${Number(m[1])}年${Number(m[2])}月${Number(m[3])}日`;
+}
+
+function formatDayRecordBrief(row) {
+  if (!row) return "PDF无记录";
+  const dateText = formatDateZh(normalizeText(row["出入境日期"]));
+  const port = normalizePortName(row["出入境口岸"]) || normalizeText(row["出入境口岸"]) || "口岸未知";
+  const certName = normalizeText(row["证件名称"]) || "证件";
+  const certNum = normalizeText(row["证件号码"]);
+  const certText = certNum ? `${certName}${certNum}` : certName;
+  return `${dateText} ${port} ${certText}`;
 }
 
 function setCalcOrderWarn(text = "") {
@@ -1107,6 +1129,44 @@ function calculateAbroad(records) {
   return abroad;
 }
 
+function findBoundaryRecordsByDate(dateKey, rawSortedRecords) {
+  let latestExit = null;
+  let nearestExit = null;
+  let latestEntry = null;
+  let nearestEntry = null;
+  for (const row of rawSortedRecords) {
+    const typ = normalizeText(row["出境/入境"]);
+    const d = normalizeText(row["出入境日期"]);
+    if (typ === "出境" && d <= dateKey) {
+      latestExit = row;
+    }
+    if (!nearestExit && typ === "出境" && d >= dateKey) {
+      nearestExit = row;
+    }
+    if (typ === "入境" && d <= dateKey) {
+      latestEntry = row;
+    }
+    if (typ === "入境" && d >= dateKey) {
+      nearestEntry = row;
+      break;
+    }
+  }
+  return { latestExit, nearestExit, latestEntry, nearestEntry };
+}
+
+function getFilteredRawPdfRecords(selectedCred, selectedPort) {
+  if (!state.originalData || !Array.isArray(state.originalData["数据"])) return [];
+  return state.originalData["数据"].filter((r) => {
+    const d = normalizeText(r["出入境日期"]);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return false;
+    const c = `${normalizeText(r["证件名称"])}|${normalizeText(r["证件号码"])}`;
+    if (!selectedCred.has(c)) return false;
+    const p = normalizePortName(r["出入境口岸"]);
+    if (!p || !selectedPort.has(p)) return false;
+    return true;
+  });
+}
+
 function buildVirtualBoundaryRecord(baseRow, movement, dateText, serialText) {
   return {
     "序号": String(serialText),
@@ -1216,8 +1276,11 @@ function validateSelectedOrder(records, startDate = "", endDate = "") {
   return "";
 }
 
-function renderCalendar(start, end, abroadSet) {
+function renderCalendar(start, end, abroadSet, rawPdfRecords) {
   el.calendar.innerHTML = "";
+  state.calendarDayInfoMap = new Map();
+  state.activeCalendarDay = "";
+  hideCalendarTooltip();
   if (!isValidDateKey(start) || !isValidDateKey(end) || start > end) {
     el.totalDays.textContent = "日期范围无效，请重新选择。";
     return;
@@ -1247,6 +1310,12 @@ function renderCalendar(start, end, abroadSet) {
   const endYear = displayEndMonth.y;
   const endMonth = displayEndMonth.m;
   const frag = document.createDocumentFragment();
+  const rawSorted = [...(rawPdfRecords || [])].sort((a, b) => {
+    const da = normalizeText(a["出入境日期"]);
+    const db = normalizeText(b["出入境日期"]);
+    if (da !== db) return da.localeCompare(db, "zh-CN");
+    return toSerial(b) - toSerial(a);
+  });
 
   while (cursorYear < endYear || (cursorYear === endYear && cursorMonth <= endMonth)) {
     const y = cursorYear;
@@ -1263,11 +1332,23 @@ function renderCalendar(start, end, abroadSet) {
 
     for (let d = 1; d <= days; d++) {
       const key = formatDateKey(y, m, d);
+      const inRange = key >= start && key <= end;
+      const inAbroad = inRangeAbroadSet.has(key);
+      const { latestExit, nearestExit, latestEntry, nearestEntry } = findBoundaryRecordsByDate(key, rawSorted);
+      state.calendarDayInfoMap.set(key, {
+        date: key,
+        inRange,
+        inAbroad,
+        abroadExitText: formatDayRecordBrief(latestExit),
+        abroadEntryText: formatDayRecordBrief(nearestEntry),
+        domesticEntryText: formatDayRecordBrief(latestEntry),
+        domesticExitText: formatDayRecordBrief(nearestExit),
+      });
       if (inRangeAbroadSet.has(key)) {
-        html.push(`<div class="day abroad">${d}</div>`);
+        html.push(`<div class="day abroad" data-date="${key}">${d}</div>`);
         highlightedDays += 1;
       } else {
-        html.push(`<div class="day">${d}</div>`);
+        html.push(`<div class="day" data-date="${key}">${d}</div>`);
       }
     }
     html.push("</div>");
@@ -1285,6 +1366,72 @@ function renderCalendar(start, end, abroadSet) {
   el.totalDays.innerHTML = `<span class="total-label">累计总出境天数</span><span class="total-value">${highlightedDays} 天</span>`;
   state.highlightedDays = highlightedDays;
   updateQualificationPanels(highlightedDays);
+}
+
+function ensureCalendarTooltip() {
+  if (calendarTooltipEl && calendarTooltipEl.isConnected) return calendarTooltipEl;
+  calendarTooltipEl = document.createElement("div");
+  calendarTooltipEl.className = "calendar-tooltip hidden";
+  document.body.appendChild(calendarTooltipEl);
+  return calendarTooltipEl;
+}
+
+function hideCalendarTooltip() {
+  if (!calendarTooltipEl) return;
+  calendarTooltipEl.classList.add("hidden");
+}
+
+function showCalendarTooltip(dayCell) {
+  if (!dayCell) return;
+  const dateKey = normalizeText(dayCell.dataset.date);
+  if (!dateKey) return;
+  const dayInfo = state.calendarDayInfoMap.get(dateKey);
+  if (!dayInfo) return;
+
+  const tip = ensureCalendarTooltip();
+  if (!dayInfo.inRange) {
+    tip.innerHTML = "<p class=\"calendar-tooltip-row\">本日不在计算范围内</p>";
+  } else if (!dayInfo.inAbroad) {
+    tip.innerHTML = [
+      `<p class="calendar-tooltip-row"><strong>${escapeHtml(formatDateZh(dateKey))}</strong></p>`,
+      "<p class=\"calendar-tooltip-row\">本日不在境外</p>",
+      `<p class="calendar-tooltip-row">入境：${escapeHtml(dayInfo.domesticEntryText)}</p>`,
+      `<p class="calendar-tooltip-row">出境：${escapeHtml(dayInfo.domesticExitText)}</p>`,
+    ].join("");
+  } else {
+    tip.innerHTML = [
+      `<p class="calendar-tooltip-row"><strong>${escapeHtml(formatDateZh(dateKey))}</strong></p>`,
+      "<p class=\"calendar-tooltip-row\">本日在境外</p>",
+      `<p class="calendar-tooltip-row">出境：${escapeHtml(dayInfo.abroadExitText)}</p>`,
+      `<p class="calendar-tooltip-row">入境：${escapeHtml(dayInfo.abroadEntryText)}</p>`,
+    ].join("");
+  }
+  tip.classList.remove("hidden");
+
+  const rect = dayCell.getBoundingClientRect();
+  const margin = 10;
+  const tipRect = tip.getBoundingClientRect();
+  let left = rect.left + rect.width / 2 - tipRect.width / 2;
+  left = Math.max(margin, Math.min(window.innerWidth - tipRect.width - margin, left));
+  let top = rect.top - tipRect.height - 8;
+  if (top < margin) {
+    top = rect.bottom + 8;
+  }
+  tip.style.left = `${left}px`;
+  tip.style.top = `${top}px`;
+}
+
+function getCalendarDayCell(event) {
+  const target = event.target;
+  if (!target || typeof target.closest !== "function") return null;
+  return target.closest(".day[data-date]");
+}
+
+function handleCalendarInteraction(event) {
+  const dayCell = getCalendarDayCell(event);
+  if (!dayCell) return;
+  state.activeCalendarDay = normalizeText(dayCell.dataset.date);
+  showCalendarTooltip(dayCell);
 }
 
 function runValidation(dataset, adjustmentSummary = "") {
@@ -1518,6 +1665,7 @@ function performCalculation() {
 
   const selectedCred = new Set(selectedCredValues);
   const selectedPort = new Set(selectedPortValues);
+  const rawPdfFilteredBySelection = getFilteredRawPdfRecords(selectedCred, selectedPort);
 
   const filteredBySelection = state.workingData["数据"].filter((r) => {
     const d = normalizeText(r["出入境日期"]);
@@ -1542,7 +1690,7 @@ function performCalculation() {
   setCalcOrderWarn("");
 
   const abroadMap = calculateAbroad(filteredBySelection);
-  renderCalendar(start, end, new Set(abroadMap.keys()));
+  renderCalendar(start, end, new Set(abroadMap.keys()), rawPdfFilteredBySelection);
   el.resultBox.classList.remove("hidden");
 }
 
@@ -1558,6 +1706,10 @@ function requestCalculation() {
 
 el.startDate.addEventListener("change", requestCalculation);
 el.endDate.addEventListener("change", requestCalculation);
+el.calendar.addEventListener("mouseover", handleCalendarInteraction);
+el.calendar.addEventListener("mousemove", handleCalendarInteraction);
+el.calendar.addEventListener("click", handleCalendarInteraction);
+el.calendar.addEventListener("mouseleave", hideCalendarTooltip);
 
 updateTimeDisplays();
 setInterval(updateTimeDisplays, 60 * 1000);

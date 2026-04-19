@@ -844,6 +844,29 @@ input[type="date"] {
   visibility: hidden;
 }
 
+.calendar-tooltip {
+  position: fixed;
+  z-index: 9999;
+  max-width: min(420px, calc(100vw - 24px));
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #b8cde4;
+  background: #ffffff;
+  box-shadow: 0 10px 30px #1f4f7a2e;
+  color: #1d3853;
+  pointer-events: none;
+}
+
+.calendar-tooltip-row {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.calendar-tooltip-row + .calendar-tooltip-row {
+  margin-top: 3px;
+}
+
 .hidden {
   display: none !important;
 }
