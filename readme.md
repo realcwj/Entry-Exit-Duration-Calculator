@@ -12,6 +12,7 @@
   <a href="imgs/3.png" target="_blank" rel="noopener noreferrer"><img src="imgs/3.png" alt="功能展示3（点击查看大图）" height="180" /></a>
   <a href="imgs/4.png" target="_blank" rel="noopener noreferrer"><img src="imgs/4.png" alt="功能展示4（点击查看大图）" height="180" /></a>
   <a href="imgs/5.png" target="_blank" rel="noopener noreferrer"><img src="imgs/5.png" alt="功能展示5（点击查看大图）" height="180" /></a>
+  <a href="imgs/6.png" target="_blank" rel="noopener noreferrer"><img src="imgs/6.png" alt="功能展示6（点击查看大图）" height="180" /></a>
 </div>
 
 ## 核心特点
