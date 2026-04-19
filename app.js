@@ -1107,8 +1107,21 @@ function calculateAbroad(records) {
   return abroad;
 }
 
-function validateSelectedOrder(records) {
-  const sorted = [...records]
+function buildVirtualBoundaryRecord(baseRow, movement, dateText, serialText) {
+  return {
+    "序号": String(serialText),
+    "出境/入境": movement,
+    "出入境日期": dateText,
+    "证件名称": normalizeText(baseRow?.["证件名称"] || ""),
+    "证件号码": normalizeText(baseRow?.["证件号码"] || ""),
+    "出入境口岸": normalizeText(baseRow?.["出入境口岸"] || ""),
+    "航班号": normalizeText(baseRow?.["航班号"] || ""),
+  };
+}
+
+function validateSelectedOrder(records, startDate = "", endDate = "") {
+  const hasRangeLimit = isValidDateKey(startDate) && isValidDateKey(endDate) && startDate <= endDate;
+  const allSorted = [...records]
     .filter((r) => {
       const typ = normalizeText(r["出境/入境"]);
       const d = normalizeText(r["出入境日期"]);
@@ -1122,8 +1135,51 @@ function validateSelectedOrder(records) {
       return toSerial(b) - toSerial(a);
     });
 
-  if (!sorted.length) {
-    return "根据所勾选的数据，未找到可计算的出入境记录，请核查筛选条件。";
+  const inRangeRecords = hasRangeLimit
+    ? allSorted.filter((r) => {
+        const d = normalizeText(r["出入境日期"]);
+        return d >= startDate && d <= endDate;
+      })
+    : allSorted;
+
+  const sorted = [...inRangeRecords];
+  if (!sorted.length) return "";
+
+  if (hasRangeLimit) {
+    const first = sorted[0];
+    const firstType = normalizeText(first["出境/入境"]);
+    if (firstType === "入境") {
+      const firstIndex = allSorted.indexOf(first);
+      let baseRow = first;
+      for (let i = firstIndex - 1; i >= 0; i--) {
+        if (normalizeText(allSorted[i]["出境/入境"]) === "出境") {
+          baseRow = allSorted[i];
+          break;
+        }
+      }
+      sorted.unshift(buildVirtualBoundaryRecord(baseRow, "出境", startDate, "999999999"));
+    }
+
+    const last = sorted[sorted.length - 1];
+    const lastType = normalizeText(last["出境/入境"]);
+    if (lastType === "出境") {
+      const lastIndex = allSorted.indexOf(last);
+      let baseRow = last;
+      for (let i = lastIndex + 1; i < allSorted.length; i++) {
+        if (normalizeText(allSorted[i]["出境/入境"]) === "入境") {
+          baseRow = allSorted[i];
+          break;
+        }
+      }
+      sorted.push(buildVirtualBoundaryRecord(baseRow, "入境", endDate, "0"));
+    }
+
+    sorted.sort((a, b) => {
+      const da = normalizeText(a["出入境日期"]);
+      const db = normalizeText(b["出入境日期"]);
+      if (da !== db) return da.localeCompare(db, "zh-CN");
+      return toSerial(b) - toSerial(a);
+    });
   }
 
   let expected = "出境";
@@ -1476,7 +1532,7 @@ function performCalculation() {
     return true;
   });
 
-  const orderWarn = validateSelectedOrder(filteredBySelection);
+  const orderWarn = validateSelectedOrder(filteredBySelection, start, end);
   if (orderWarn) {
     setCalcOrderWarn(orderWarn);
     el.resultBox.classList.add("hidden");
