@@ -16,6 +16,8 @@ const state = {
   calcRafId: 0,
   calendarDayInfoMap: new Map(),
   activeCalendarDay: "",
+  bulkEditMode: "",
+  manualDayOverrides: new Map(),
 };
 
 const el = {
@@ -60,6 +62,8 @@ const el = {
   carProgress: document.getElementById("carProgress"),
   totalDays: document.getElementById("totalDays"),
   calendar: document.getElementById("calendar"),
+  btnBatchAbroad: document.getElementById("btnBatchAbroad"),
+  btnBatchDomestic: document.getElementById("btnBatchDomestic"),
 };
 
 const SHANGHAI_REQUIREMENTS = {
@@ -87,6 +91,12 @@ const DEMO_AIRLINE_PREFIX = ["MU", "CA", "CZ", "FM", "HU", "9C", "MF", "ZH", "HO
 const CALENDAR_WEEKDAY_ROW =
   "<div class=\"week\"><div class=\"wk\">一</div><div class=\"wk\">二</div><div class=\"wk\">三</div><div class=\"wk\">四</div><div class=\"wk\">五</div><div class=\"wk\">六</div><div class=\"wk\">日</div></div>";
 let calendarTooltipEl = null;
+const MANUAL_RECORD_DETAIL = Object.freeze({
+  date: "手动编辑",
+  port: "手动编辑",
+  certType: "手动编辑",
+  certNum: "手动编辑",
+});
 
 function pad2(v) {
   return String(v).padStart(2, "0");
@@ -223,14 +233,32 @@ function formatDateZh(dateText) {
   return `${Number(m[1])}年${Number(m[2])}月${Number(m[3])}日`;
 }
 
-function formatDayRecordBrief(row) {
-  if (!row) return "PDF无记录";
-  const dateText = formatDateZh(normalizeText(row["出入境日期"]));
-  const port = normalizePortName(row["出入境口岸"]) || normalizeText(row["出入境口岸"]) || "口岸未知";
-  const certName = normalizeText(row["证件名称"]) || "证件";
-  const certNum = normalizeText(row["证件号码"]);
-  const certText = certNum ? `${certName} ${certNum}` : certName;
-  return `${dateText} ${port} ${certText}`;
+function formatDayRecordDetail(row) {
+  if (!row) {
+    return {
+      date: "PDF无记录",
+      port: "PDF无记录",
+      certType: "PDF无记录",
+      certNum: "PDF无记录",
+    };
+  }
+  const date = formatDateZh(normalizeText(row["出入境日期"])) || "PDF无记录";
+  const port = normalizePortName(row["出入境口岸"]) || normalizeText(row["出入境口岸"]) || "PDF无记录";
+  const certType = normalizeText(row["证件名称"]) || "PDF无记录";
+  const certNum = normalizeText(row["证件号码"]) || "PDF无记录";
+  return { date, port, certType, certNum };
+}
+
+function renderRecordCard(title, detail) {
+  return [
+    "<article class=\"calendar-tooltip-card\">",
+    `<h5>${escapeHtml(title)}</h5>`,
+    `<p class="calendar-tooltip-row"><span class="calendar-tooltip-label">日期</span><span>${escapeHtml(detail.date)}</span></p>`,
+    `<p class="calendar-tooltip-row"><span class="calendar-tooltip-label">口岸</span><span>${escapeHtml(detail.port)}</span></p>`,
+    `<p class="calendar-tooltip-row"><span class="calendar-tooltip-label">证件类型</span><span>${escapeHtml(detail.certType)}</span></p>`,
+    `<p class="calendar-tooltip-row"><span class="calendar-tooltip-label">证件号</span><span>${escapeHtml(detail.certNum)}</span></p>`,
+    "</article>",
+  ].join("");
 }
 
 function setCalcOrderWarn(text = "") {
@@ -1333,22 +1361,43 @@ function renderCalendar(start, end, abroadSet, rawPdfRecords) {
     for (let d = 1; d <= days; d++) {
       const key = formatDateKey(y, m, d);
       const inRange = key >= start && key <= end;
-      const inAbroad = inRangeAbroadSet.has(key);
+      const originalInAbroad = inRangeAbroadSet.has(key);
+      const manualOverride = inRange ? state.manualDayOverrides.get(key) : "";
+      const isManualEdited = manualOverride === "abroad" || manualOverride === "domestic";
+      const inAbroad = isManualEdited ? manualOverride === "abroad" : originalInAbroad;
+      const canEditToAbroad = state.bulkEditMode === "abroad" && inRange && !inAbroad;
+      const canEditToDomestic = state.bulkEditMode === "domestic" && inRange && inAbroad;
+      const editableClass = canEditToAbroad
+        ? " editable-target editable-target-abroad"
+        : canEditToDomestic
+          ? " editable-target editable-target-domestic"
+          : "";
       const { latestExit, nearestExit, latestEntry, nearestEntry } = findBoundaryRecordsByDate(key, rawSorted);
+      const abroadExit = isManualEdited ? MANUAL_RECORD_DETAIL : formatDayRecordDetail(latestExit);
+      const abroadEntry = isManualEdited ? MANUAL_RECORD_DETAIL : formatDayRecordDetail(nearestEntry);
+      const domesticEntry = isManualEdited ? MANUAL_RECORD_DETAIL : formatDayRecordDetail(latestEntry);
+      const domesticExit = isManualEdited ? MANUAL_RECORD_DETAIL : formatDayRecordDetail(nearestExit);
       state.calendarDayInfoMap.set(key, {
         date: key,
         inRange,
         inAbroad,
-        abroadExitText: formatDayRecordBrief(latestExit),
-        abroadEntryText: formatDayRecordBrief(nearestEntry),
-        domesticEntryText: formatDayRecordBrief(latestEntry),
-        domesticExitText: formatDayRecordBrief(nearestExit),
+        isManualEdited,
+        abroadExit,
+        abroadEntry,
+        domesticEntry,
+        domesticExit,
       });
-      if (inRangeAbroadSet.has(key)) {
-        html.push(`<div class="day abroad" data-date="${key}">${d}</div>`);
+      if (inAbroad) {
+        const dayClass = isManualEdited ? "day manual-abroad" : "day abroad";
+        html.push(`<div class="${dayClass}${editableClass}" data-date="${key}">${d}</div>`);
         highlightedDays += 1;
       } else {
-        html.push(`<div class="day" data-date="${key}">${d}</div>`);
+        const dayClass = isManualEdited
+          ? "day manual-domestic"
+          : inRange
+            ? "day"
+            : "day out-of-range";
+        html.push(`<div class="${dayClass}${editableClass}" data-date="${key}">${d}</div>`);
       }
     }
     html.push("</div>");
@@ -1381,7 +1430,59 @@ function hideCalendarTooltip() {
   calendarTooltipEl.classList.add("hidden");
 }
 
+function updateBatchEditButtons() {
+  const abroadBtn = el.btnBatchAbroad;
+  const domesticBtn = el.btnBatchDomestic;
+  if (!abroadBtn || !domesticBtn) return;
+  const mode = state.bulkEditMode;
+  const abroadActive = mode === "abroad";
+  const domesticActive = mode === "domestic";
+
+  abroadBtn.innerHTML = abroadActive
+    ? "<i class=\"bi bi-check2-square\"></i> 完成编辑<br><span class=\"btn-subtext\"><i class=\"bi bi-info-circle-fill\"></i> 请点击下方日期设置状态</span>"
+    : "<i class=\"bi bi-pencil-square\"></i> 批量设为在境外";
+  domesticBtn.innerHTML = domesticActive
+    ? "<i class=\"bi bi-check2-square\"></i> 完成编辑<br><span class=\"btn-subtext\"><i class=\"bi bi-info-circle-fill\"></i> 请点击下方日期设置状态</span>"
+    : "<i class=\"bi bi-pencil-square\"></i> 批量设为在境内";
+
+  abroadBtn.classList.toggle("is-editing", abroadActive);
+  domesticBtn.classList.toggle("is-editing", domesticActive);
+  abroadBtn.classList.toggle("is-editing-abroad", abroadActive);
+  domesticBtn.classList.toggle("is-editing-domestic", domesticActive);
+  abroadBtn.classList.toggle("is-muted", domesticActive);
+  domesticBtn.classList.toggle("is-muted", abroadActive);
+
+  abroadBtn.disabled = domesticActive;
+  domesticBtn.disabled = abroadActive;
+}
+
+function toggleBulkEditMode(mode) {
+  if (!(mode === "abroad" || mode === "domestic")) return;
+  if (state.bulkEditMode === mode) {
+    state.bulkEditMode = "";
+  } else if (!state.bulkEditMode) {
+    state.bulkEditMode = mode;
+  }
+  hideCalendarTooltip();
+  updateBatchEditButtons();
+  requestCalculation();
+}
+
+function applyManualOverride(dayCell) {
+  if (!dayCell || !state.bulkEditMode) return;
+  const dateKey = normalizeText(dayCell.dataset.date);
+  if (!dateKey) return;
+  const dayInfo = state.calendarDayInfoMap.get(dateKey);
+  if (!dayInfo || !dayInfo.inRange) return;
+  if (state.bulkEditMode === "abroad" && dayInfo.inAbroad) return;
+  if (state.bulkEditMode === "domestic" && !dayInfo.inAbroad) return;
+
+  state.manualDayOverrides.set(dateKey, state.bulkEditMode);
+  requestCalculation();
+}
+
 function showCalendarTooltip(dayCell) {
+  if (state.bulkEditMode) return;
   if (!dayCell) return;
   const dateKey = normalizeText(dayCell.dataset.date);
   if (!dateKey) return;
@@ -1393,17 +1494,25 @@ function showCalendarTooltip(dayCell) {
     tip.innerHTML = "<p class=\"calendar-tooltip-row\">本日不在计算范围内</p>";
   } else if (!dayInfo.inAbroad) {
     tip.innerHTML = [
-      `<p class="calendar-tooltip-row"><strong>${escapeHtml(formatDateZh(dateKey))}</strong></p>`,
-      "<p class=\"calendar-tooltip-row\">本日不在境外</p>",
-      `<p class="calendar-tooltip-row">入境：${escapeHtml(dayInfo.domesticEntryText)}</p>`,
-      `<p class="calendar-tooltip-row">出境：${escapeHtml(dayInfo.domesticExitText)}</p>`,
+      `<p class="calendar-tooltip-row calendar-tooltip-date"><strong>${escapeHtml(formatDateZh(dateKey))}</strong></p>`,
+      "<section class=\"calendar-tooltip-group\">",
+      "<p class=\"calendar-tooltip-row calendar-tooltip-group-title\"><i class=\"bi bi-box-arrow-in-right\"></i> 本日在境内</p>",
+      "<div class=\"calendar-tooltip-columns\">",
+      renderRecordCard("关联入境记录", dayInfo.domesticEntry),
+      renderRecordCard("关联出境记录", dayInfo.domesticExit),
+      "</div>",
+      "</section>",
     ].join("");
   } else {
     tip.innerHTML = [
-      `<p class="calendar-tooltip-row"><strong>${escapeHtml(formatDateZh(dateKey))}</strong></p>`,
-      "<p class=\"calendar-tooltip-row\">本日在境外</p>",
-      `<p class="calendar-tooltip-row">出境：${escapeHtml(dayInfo.abroadExitText)}</p>`,
-      `<p class="calendar-tooltip-row">入境：${escapeHtml(dayInfo.abroadEntryText)}</p>`,
+      `<p class="calendar-tooltip-row calendar-tooltip-date"><strong>${escapeHtml(formatDateZh(dateKey))}</strong></p>`,
+      "<section class=\"calendar-tooltip-group\">",
+      "<p class=\"calendar-tooltip-row calendar-tooltip-group-title\"><i class=\"bi bi-box-arrow-right\"></i> 本日在境外</p>",
+      "<div class=\"calendar-tooltip-columns\">",
+      renderRecordCard("关联出境记录", dayInfo.abroadExit),
+      renderRecordCard("关联入境记录", dayInfo.abroadEntry),
+      "</div>",
+      "</section>",
     ].join("");
   }
   tip.classList.remove("hidden");
@@ -1437,12 +1546,23 @@ function getCalendarDayCell(event) {
 
 function handleCalendarInteraction(event) {
   const dayCell = getCalendarDayCell(event);
+  if (state.bulkEditMode) {
+    hideCalendarTooltip();
+    if (event.type === "click" && dayCell) {
+      applyManualOverride(dayCell);
+    }
+    return;
+  }
   if (!dayCell) return;
   state.activeCalendarDay = normalizeText(dayCell.dataset.date);
   showCalendarTooltip(dayCell);
 }
 
 function runValidation(dataset, adjustmentSummary = "") {
+  state.bulkEditMode = "";
+  state.manualDayOverrides = new Map();
+  updateBatchEditButtons();
+  hideCalendarTooltip();
   state.workingData = dataset;
   state.adjustmentSummary = adjustmentSummary || "";
   const records = [...dataset["数据"]].sort((a, b) => toSerial(a) - toSerial(b));
@@ -1699,6 +1819,7 @@ function performCalculation() {
 
   const abroadMap = calculateAbroad(filteredBySelection);
   renderCalendar(start, end, new Set(abroadMap.keys()), rawPdfFilteredBySelection);
+  updateBatchEditButtons();
   el.resultBox.classList.remove("hidden");
 }
 
@@ -1714,10 +1835,17 @@ function requestCalculation() {
 
 el.startDate.addEventListener("change", requestCalculation);
 el.endDate.addEventListener("change", requestCalculation);
+if (el.btnBatchAbroad) {
+  el.btnBatchAbroad.addEventListener("click", () => toggleBulkEditMode("abroad"));
+}
+if (el.btnBatchDomestic) {
+  el.btnBatchDomestic.addEventListener("click", () => toggleBulkEditMode("domestic"));
+}
 el.calendar.addEventListener("mouseover", handleCalendarInteraction);
 el.calendar.addEventListener("mousemove", handleCalendarInteraction);
 el.calendar.addEventListener("click", handleCalendarInteraction);
 el.calendar.addEventListener("mouseleave", hideCalendarTooltip);
+updateBatchEditButtons();
 
 updateTimeDisplays();
 setInterval(updateTimeDisplays, 60 * 1000);
