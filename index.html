@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>出入境记录计算器</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="bg-orb bg-orb-a"></div>
+    <div class="bg-orb bg-orb-b"></div>
+    <main class="app-shell">
+      <section class="card module-shell" id="mainModule">
+      <header class="hero">
+        <h1>出入境记录计算器</h1>
+        <details class="guide">
+          <summary class="guide-title">
+            <span class="guide-title-text">如何获取“出入境记录查询结果”PDF？</span>
+            <span class="guide-title-icons" aria-hidden="true">
+              <i class="bi bi-caret-left-fill guide-caret guide-caret-left"></i>
+              <i class="bi bi-caret-down-fill guide-caret guide-caret-down"></i>
+            </span>
+          </summary>
+          <div class="guide-steps">
+            <span class="guide-step">微信/支付宝小程序“移民局 12367”</span>
+            <i class="bi bi-arrow-right guide-arrow guide-arrow-right" aria-hidden="true"></i>
+            <i class="bi bi-arrow-down guide-arrow guide-arrow-down" aria-hidden="true"></i>
+            <span class="guide-step">首页</span>
+            <i class="bi bi-arrow-right guide-arrow guide-arrow-right" aria-hidden="true"></i>
+            <i class="bi bi-arrow-down guide-arrow guide-arrow-down" aria-hidden="true"></i>
+            <span class="guide-step">中国公民服务</span>
+            <i class="bi bi-arrow-right guide-arrow guide-arrow-right" aria-hidden="true"></i>
+            <i class="bi bi-arrow-down guide-arrow guide-arrow-down" aria-hidden="true"></i>
+            <span class="guide-step">查询业务</span>
+            <i class="bi bi-arrow-right guide-arrow guide-arrow-right" aria-hidden="true"></i>
+            <i class="bi bi-arrow-down guide-arrow guide-arrow-down" aria-hidden="true"></i>
+            <span class="guide-step">出入境记录查询</span>
+            <i class="bi bi-arrow-right guide-arrow guide-arrow-right" aria-hidden="true"></i>
+            <i class="bi bi-arrow-down guide-arrow guide-arrow-down" aria-hidden="true"></i>
+            <span class="guide-step">（按需选择）</span>
+            <i class="bi bi-arrow-right guide-arrow guide-arrow-right" aria-hidden="true"></i>
+            <i class="bi bi-arrow-down guide-arrow guide-arrow-down" aria-hidden="true"></i>
+            <span class="guide-step">记录下载</span>
+            <i class="bi bi-arrow-right guide-arrow guide-arrow-right" aria-hidden="true"></i>
+            <i class="bi bi-arrow-down guide-arrow guide-arrow-down" aria-hidden="true"></i>
+            <span class="guide-step">本地下载</span>
+          </div>
+        </details>
+
+        <div class="time-board">
+          <p class="time-note"><i class="bi bi-info-circle-fill" aria-hidden="true"></i> 下列所有日期均以北京时间为准</p>
+          <div class="time-stats">
+            <article class="stat">
+              <div class="k">当前北京时间</div>
+              <div class="v" id="beijingTime">--</div>
+            </article>
+            <article class="stat">
+              <div class="k">当前系统时间</div>
+              <div class="v" id="systemTime">--</div>
+            </article>
+          </div>
+        </div>
+      </header>
+
+      <section class="section module-part" id="uploadSection">
+        <div class="section-head upload-head">
+          <h2>上传“出入境记录查询结果”PDF</h2>
+          <div class="upload-head-notes">
+            <p class="upload-head-note"><i class="bi bi-info-circle-fill" aria-hidden="true"></i> 所有数据均在浏览器前端计算，不会上传云端，请放心使用。</p>
+            <p class="upload-head-note"><i class="bi bi-info-circle-fill" aria-hidden="true"></i> 还是不放心？点我<a href="https://www.github.com/xxx" target="_blank" rel="noopener noreferrer">审查源代码/本地部署</a></p>
+          </div>
+        </div>
+
+        <div class="section-body">
+          <input id="pdfInput" class="hidden" type="file" accept="application/pdf" />
+          <div id="dropzone" class="dropzone" role="button" tabindex="0">
+            <strong>拖入 PDF 或点击选择文件</strong>
+            <span>识别后立即解析并核验</span>
+          </div>
+
+          <div id="stats" class="stats"></div>
+
+          <div class="action-row action-row-full">
+            <button id="btnExport" class="btn hidden">
+              导出出入境 JSON 数据
+              <span class="btn-subtext"><i class="bi bi-info-circle-fill"></i> 不知道这是啥就别点</span>
+            </button>
+          </div>
+
+          <div id="status" class="status">等待上传 PDF 文件。</div>
+
+          <div id="adjustBox" class="adjust card hidden">
+            <h3 id="adjustTitle">检测到最近记录为出境，可能尚未同步入境信息，请选择处理方式：</h3>
+            <div class="adjust-list">
+              <div class="adjust-item" id="adjustPrimaryItem">
+                <p id="adjustPrimaryText">我还在境外/我刚入境系统还未同步数据</p>
+                <button id="btnAddVirtual" class="btn btn-secondary">
+                  （<i class="bi bi-check"></i>推荐）计算截止到今日数据
+                </button>
+              </div>
+              <div class="adjust-item" id="adjustSecondaryItem">
+                <p id="adjustSecondaryText">另一种选择</p>
+                <button id="btnUseLastEntry" class="btn btn-secondary">计算截止到上次入境数据</button>
+              </div>
+              <div class="adjust-item hidden" id="adjustManualItem">
+                <p>手动填写出境记录</p>
+                <div class="adjust-manual-row">
+                  <input id="manualExitDate" type="date" aria-label="手动填写出境日期" />
+                  <button id="btnAddManualExit" class="btn btn-secondary" type="button">确认</button>
+                </div>
+                <p id="manualExitWarn" class="adjust-manual-warn hidden"></p>
+              </div>
+              <div class="adjust-item">
+                <p>重新检查PDF</p>
+                <button id="btnReupload" class="btn btn-secondary">重新上传</button>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <section class="section module-part hidden" id="calcSection">
+        <div class="section-head">
+          <h2>出入境天数计算器</h2>
+        </div>
+
+        <div class="section-body">
+          <div class="filter-grid">
+            <div class="field card">
+              <label for="startDate">计算开始日期</label>
+              <input id="startDate" type="date" />
+            </div>
+            <div class="field card">
+              <label for="endDate">计算结束日期</label>
+              <input id="endDate" type="date" />
+            </div>
+            <div class="field card">
+              <label>有效证件</label>
+              <p class="field-tip">
+                若出入境证件不一致，请同时勾选对应证件。<br/>此类情况可能会导致计算错误，请基于下方日历二次核查。<br/>例如：“内地-港澳（通行证出境）-国外”和“国外-内地（护照入境）”。
+              </p>
+              <div id="credentialList" class="checklist"></div>
+            </div>
+            <div class="field card">
+              <label>有效通行口岸</label>
+              <p class="field-tip">
+                若出入境口岸不一致，请同时勾选对应口岸。<br/>此类情况可能会导致计算错误，请基于下方日历二次核查。<br/>例如：“浦东机场口岸-国外”和“国外-大兴机场口岸”。
+              </p>
+              <div id="portList" class="checklist"></div>
+            </div>
+          </div>
+
+          <div id="calcOrderWarn" class="adjust card warn-tone hidden">
+            <h3 id="calcOrderWarnText"></h3>
+          </div>
+
+          <div id="resultBox" class="result-wrap hidden">
+            <div id="totalDays" class="total card"></div>
+
+            <div id="qualificationBoard" class="qualification-grid">
+              <article class="quota-card card" id="beijingPanel">
+                <div class="quota-head">
+                  <h3>北京落户</h3>
+                  <p class="quota-note"><i class="bi bi-info-circle-fill"></i> 仅供参考，以实际政策为准。</p>
+                </div>
+                <p id="beijingSummary" class="quota-main"></p>
+                <div class="quota-progress"><span id="beijingProgress"></span></div>
+              </article>
+
+              <article class="quota-card card" id="shanghaiPanel">
+                <div class="quota-head">
+                  <h3>上海落户</h3>
+                  <p class="quota-note"><i class="bi bi-info-circle-fill"></i> 仅供参考，以实际政策为准。</p>
+                  <div class="degree-switch" id="shanghaiDegreeSwitch" role="tablist" aria-label="上海落户学历档位">
+                    <button type="button" data-level="bachelor">学士</button>
+                    <button type="button" data-level="master" class="active">硕士</button>
+                    <button type="button" data-level="doctor">博士</button>
+                  </div>
+                </div>
+                <p id="shanghaiSummary" class="quota-main"></p>
+                <div class="quota-progress"><span id="shanghaiProgress"></span></div>
+              </article>
+
+              <article class="quota-card card" id="carPanel">
+                <div class="quota-head">
+                  <h3>免税购车资格</h3>
+                  <p class="quota-note"><i class="bi bi-info-circle-fill"></i> 仅供参考，以实际政策为准。</p>
+                </div>
+                <p id="carSummary" class="quota-main"></p>
+                <div class="quota-progress"><span id="carProgress"></span></div>
+              </article>
+            </div>
+            <div class="calendar-note"><i class="bi bi-info-circle-fill"></i> 在境外的天数用浅蓝色标出，请根据实际情况进行二次核查。</div>
+            <div id="calendar" class="calendar-grid"></div>
+          </div>
+        </div>
+      </section>
+      </section>
+    </main>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>
