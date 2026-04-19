@@ -4,6 +4,16 @@
 
 > 索引词：中国留学生出入境记录计算器、国家移民局、出入境记录查询结果、留学生落户资格、北京落户、上海落户、免税购车资格、出境天数计算、PDF 解析、前端工具
 
+## 功能展示
+
+<div style="overflow-x: auto; white-space: nowrap; width: 100%;">
+  <a href="imgs/1.png" target="_blank" rel="noopener noreferrer"><img src="imgs/1.png" alt="功能展示1（点击查看大图）" height="180" /></a>
+  <a href="imgs/2.png" target="_blank" rel="noopener noreferrer"><img src="imgs/2.png" alt="功能展示2（点击查看大图）" height="180" /></a>
+  <a href="imgs/3.png" target="_blank" rel="noopener noreferrer"><img src="imgs/3.png" alt="功能展示3（点击查看大图）" height="180" /></a>
+  <a href="imgs/4.png" target="_blank" rel="noopener noreferrer"><img src="imgs/4.png" alt="功能展示4（点击查看大图）" height="180" /></a>
+  <a href="imgs/5.png" target="_blank" rel="noopener noreferrer"><img src="imgs/5.png" alt="功能展示5（点击查看大图）" height="180" /></a>
+</div>
+
 ## 核心特点
 
 - 🧠 支持本地解析：所有解析与计算均在浏览器本地完成，不上传云端。
