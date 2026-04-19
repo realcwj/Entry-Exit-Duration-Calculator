@@ -93,11 +93,37 @@ body {
   padding: 20px 24px;
 }
 
+.hero-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .hero h1 {
   margin: 0;
   font-size: clamp(24px, 3vw, 40px);
   letter-spacing: 1px;
   font-weight: 800;
+}
+
+.hero-github {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #2d5f92;
+  font-size: clamp(12px, 0.95vw, 14px);
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.hero-github i {
+  font-size: 16px;
+}
+
+.hero-github:hover {
+  text-decoration: underline;
 }
 
 .hero p {
@@ -865,6 +891,23 @@ input[type="date"] {
 }
 
 @media (max-width: 860px) {
+  .hero-top {
+    align-items: center;
+    flex-direction: column;
+  }
+
+  .hero-top h1 {
+    text-align: center;
+    width: 100%;
+  }
+
+  .hero-github {
+    justify-content: center;
+    text-align: center;
+    white-space: normal;
+    word-break: break-all;
+  }
+
   .upload-head {
     align-items: flex-start;
     flex-direction: column;
